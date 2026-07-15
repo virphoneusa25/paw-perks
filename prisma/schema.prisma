@@ -1,0 +1,197 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model LoyaltyCustomer {
+  id                String  @id @default(cuid())
+  shop              String
+  shopifyCustomerId String
+  email             String?
+  firstName         String?
+  lastName          String?
+
+  pointsBalance  Int    @default(0)
+  lifetimePoints Int    @default(0)
+  tier           String @default("PAW_PAL")
+
+  referralCode String?   @unique
+  birthday     DateTime?
+  enrolledAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  transactions    PointTransaction[]
+  processedOrders ProcessedOrder[]
+  redemptions     RewardRedemption[]
+
+  @@unique([shop, shopifyCustomerId])
+  @@index([shop])
+  @@index([email])
+}
+
+model PointTransaction {
+  id                String @id @default(cuid())
+  shop              String
+  loyaltyCustomerId String
+
+  type         String
+  points       Int
+  balanceAfter Int
+  description  String?
+
+  shopifyOrderId  String?
+  shopifyRefundId String?
+  redemptionId    String?
+  idempotencyKey  String  @unique
+
+  createdAt DateTime @default(now())
+
+  customer LoyaltyCustomer @relation(fields: [loyaltyCustomerId], references: [id], onDelete: Cascade)
+
+  @@index([shop, loyaltyCustomerId])
+  @@index([shopifyOrderId])
+  @@index([createdAt])
+}
+
+model ProcessedOrder {
+  id                String @id @default(cuid())
+  shop              String
+  loyaltyCustomerId String
+
+  shopifyOrderId     String
+  shopifyOrderNumber String?
+  eligibleSubtotal   Int
+  pointsAwarded      Int
+  pointsReversed     Int     @default(0)
+  currencyCode       String?
+
+  paidAt          DateTime?
+  fullyRefundedAt DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  customer LoyaltyCustomer @relation(fields: [loyaltyCustomerId], references: [id], onDelete: Cascade)
+
+  refundRecords RefundRecord[]
+
+  @@unique([shop, shopifyOrderId])
+  @@index([shop, loyaltyCustomerId])
+}
+
+model RefundRecord {
+  id               String @id @default(cuid())
+  shop             String
+  processedOrderId String
+
+  shopifyRefundId  String
+  refundedSubtotal Int
+  pointsReversed   Int
+  createdAt        DateTime @default(now())
+
+  order ProcessedOrder @relation(fields: [processedOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, shopifyRefundId])
+  @@index([processedOrderId])
+}
+
+model RewardDefinition {
+  id   String @id @default(cuid())
+  shop String
+
+  key            String
+  name           String
+  description    String?
+  pointsRequired Int
+  discountType   String
+  discountValue  Int
+  minimumSpend   Int?
+  expiresInDays  Int?
+  isActive       Boolean @default(true)
+  sortOrder      Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  redemptions RewardRedemption[]
+
+  @@unique([shop, key])
+  @@index([shop, isActive])
+}
+
+model RewardRedemption {
+  id                 String @id @default(cuid())
+  shop               String
+  loyaltyCustomerId  String
+  rewardDefinitionId String
+
+  pointsSpent       Int
+  discountCode      String  @unique
+  shopifyDiscountId String?
+  status            String  @default("PENDING")
+
+  redeemedAt  DateTime  @default(now())
+  expiresAt   DateTime?
+  usedAt      DateTime?
+  cancelledAt DateTime?
+
+  customer LoyaltyCustomer @relation(fields: [loyaltyCustomerId], references: [id], onDelete: Cascade)
+
+  reward RewardDefinition @relation(fields: [rewardDefinitionId], references: [id], onDelete: Restrict)
+
+  @@index([shop, loyaltyCustomerId])
+  @@index([shop, status])
+}
+
+model LoyaltySettings {
+  id   String @id @default(cuid())
+  shop String @unique
+
+  programName         String @default("Paw Perks")
+  pointsPerSpendCents Int    @default(200)
+  pointsPerUnit       Int    @default(1)
+
+  signupBonusPoints   Int @default(0)
+  birthdayBonusPoints Int @default(0)
+  referralBonusPoints Int @default(0)
+
+  excludeTaxes         Boolean @default(true)
+  excludeShipping      Boolean @default(true)
+  excludeGiftCards     Boolean @default(true)
+  allowNegativeBalance Boolean @default(false)
+
+  isEnabled Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
