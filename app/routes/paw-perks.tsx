@@ -1669,21 +1669,43 @@ function pageShell(
 
       .premium-hero {
         position: relative;
-        min-height: 470px;
+        min-height: 0;
         overflow: hidden;
-        border: 1px solid rgba(255,255,255,.2);
-        border-radius: 28px;
+        border: 1px solid rgba(6,35,63,.12);
+        border-radius: 26px;
+        background: #061b30;
+        box-shadow: 0 24px 70px rgba(5,33,59,.18);
+      }
+
+      .premium-hero__image {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        object-position: center;
+      }
+
+      .premium-hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
         background:
-          linear-gradient(90deg, rgba(3,25,48,.12), rgba(3,25,48,.02)),
-          url("https://cdn.virphoneusa.com/PawMart/ChatGPT%20Image%20Jul%2016%2C%202026%2C%2003_48_05%20PM.png") center / cover no-repeat;
-        box-shadow: 0 24px 70px rgba(5,33,59,.2);
+          linear-gradient(
+            90deg,
+            rgba(3,22,42,.56) 0%,
+            rgba(3,22,42,.12) 42%,
+            rgba(3,22,42,0) 70%
+          );
+        pointer-events: none;
       }
 
       .premium-hero__welcome {
         position: absolute;
         left: 34px;
-        bottom: 30px;
-        max-width: 390px;
+        top: 34px;
+        bottom: auto;
+        max-width: 430px;
         padding: 22px 24px;
         border: 1px solid rgba(255,255,255,.3);
         border-radius: 22px;
@@ -1717,7 +1739,7 @@ function pageShell(
         grid-template-columns: 1fr auto;
         gap: 24px;
         align-items: center;
-        margin: -46px 28px 0;
+        margin: -58px 28px 0;
         padding: 22px 26px;
         border: 1px solid var(--paw-border);
         border-radius: 22px;
@@ -2018,6 +2040,67 @@ function pageShell(
 
         .subscribe-banner {
           grid-template-columns: 1fr;
+        }
+      }
+
+
+      .dashboard-card__body .empty {
+        min-height: 0;
+        padding: 28px 18px;
+      }
+
+      .dashboard-card {
+        align-self: start;
+      }
+
+      .dashboard-grid {
+        align-items: start;
+      }
+
+      .dashboard-card__body {
+        min-height: 0;
+      }
+
+      .dashboard-card__body:has(.empty) {
+        padding-bottom: 22px;
+      }
+
+      .quick-action.dashboard-tab {
+        min-height: auto;
+        width: 100%;
+        border-bottom: 1px solid var(--paw-border);
+        border-radius: 15px;
+        background: #fff;
+        color: var(--paw-navy);
+        text-align: left;
+      }
+
+      @media (max-width: 850px) {
+        .premium-hero__image {
+          aspect-ratio: 4 / 3;
+          object-position: 62% center;
+        }
+
+        .premium-hero__welcome {
+          top: auto;
+          bottom: 16px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .premium-hero__image {
+          aspect-ratio: 1 / 1;
+          object-position: 68% center;
+        }
+
+        .premium-hero::after {
+          background:
+            linear-gradient(
+              0deg,
+              rgba(3,22,42,.78) 0%,
+              rgba(3,22,42,.15) 58%,
+              rgba(3,22,42,0) 100%
+            );
         }
       }
 
@@ -2601,6 +2684,12 @@ function renderPortal({
   return pageShell(`
     <div class="premium-dashboard" id="top">
       <section class="premium-hero">
+        <img
+          class="premium-hero__image"
+          src="https://cdn.virphoneusa.com/PawMart/ChatGPT%20Image%20Jul%2016%2C%202026%2C%2003_48_05%20PM.png"
+          alt="PawMart PawPerks rewards with a dog, cat, and pet essentials"
+        />
+
         <div class="premium-hero__welcome">
           <span>Welcome back,</span>
           <h1>${escapeHtml(displayName)}!</h1>
@@ -2870,3 +2959,4 @@ function renderPortal({
     </div>
   `, shop);
 }
+
