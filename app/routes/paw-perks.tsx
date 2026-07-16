@@ -2686,7 +2686,7 @@ function renderPortal({
       <section class="premium-hero">
         <img
           class="premium-hero__image"
-          src="https://cdn.virphoneusa.com/PawMart/ChatGPT%20Image%20Jul%2016%2C%202026%2C%2003_48_05%20PM.png"
+          src="https://virphone.b-cdn.net/PawMart/ChatGPT%20Image%20Jul%2016%2C%202026%2C%2003_48_05%20PM.png"
           alt="PawMart PawPerks rewards with a dog, cat, and pet essentials"
         />
 
