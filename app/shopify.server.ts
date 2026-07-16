@@ -36,8 +36,8 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
 
   logger: {
-    level: LogSeverity.Debug,
-    httpRequests: true,
+    level: LogSeverity.info,
+    httpRequests: false,
     timestamps: true,
   },
 
