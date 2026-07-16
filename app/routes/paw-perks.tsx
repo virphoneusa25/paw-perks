@@ -184,7 +184,8 @@ export const action = async ({
 export const loader = async ({
   request,
 }: LoaderFunctionArgs) => {
-  await authenticate.public.appProxy(request);
+  const proxyContext =
+    await authenticate.public.appProxy(request);
 
   const url = new URL(request.url);
 
@@ -224,7 +225,7 @@ export const loader = async ({
     });
   }
 
-  const customer =
+  let customer =
     await prisma.loyaltyCustomer.findUnique({
       where: {
         shop_shopifyCustomerId: {
@@ -253,20 +254,156 @@ export const loader = async ({
     });
 
   if (!customer) {
-    const html = renderMissingMemberPage({
-      shop,
-      loggedInCustomerId,
-    });
+    if (!proxyContext.admin) {
+      const html = renderMissingMemberPage({
+        shop,
+        loggedInCustomerId,
+      });
 
-    return new Response(html, {
-      status: 200,
-      headers: {
-        "Content-Type":
-          "text/html; charset=utf-8",
-        "Cache-Control":
-          "no-store, no-cache, must-revalidate",
+      return new Response(html, {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "text/html; charset=utf-8",
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      });
+    }
+
+    try {
+      const customerGid =
+        `gid://shopify/Customer/${loggedInCustomerId}`;
+
+      const response =
+        await proxyContext.admin.graphql(
+          `#graphql
+            query PawPerksStorefrontCustomer(
+              $id: ID!
+            ) {
+              customer(id: $id) {
+                id
+                email
+                firstName
+                lastName
+              }
+            }
+          `,
+          {
+            variables: {
+              id: customerGid,
+            },
+          },
+        );
+
+      const result = (await response.json()) as {
+        data?: {
+          customer?: {
+            id: string;
+            email: string | null;
+            firstName: string | null;
+            lastName: string | null;
+          } | null;
+        };
+        errors?: Array<{
+          message: string;
+        }>;
+      };
+
+      const shopifyCustomer =
+        result.data?.customer;
+
+      if (!shopifyCustomer) {
+        throw new Error(
+          result.errors?.[0]?.message ??
+            "Shopify customer could not be loaded.",
+        );
+      }
+
+      await prisma.loyaltyCustomer.upsert({
+        where: {
+          shop_shopifyCustomerId: {
+            shop,
+            shopifyCustomerId:
+              loggedInCustomerId,
+          },
+        },
+        update: {
+          email: shopifyCustomer.email,
+          firstName:
+            shopifyCustomer.firstName,
+          lastName:
+            shopifyCustomer.lastName,
+        },
+        create: {
+          shop,
+          shopifyCustomerId:
+            loggedInCustomerId,
+          email: shopifyCustomer.email,
+          firstName:
+            shopifyCustomer.firstName,
+          lastName:
+            shopifyCustomer.lastName,
+        },
+      });
+
+      customer =
+        await prisma.loyaltyCustomer.findUnique({
+          where: {
+            shop_shopifyCustomerId: {
+              shop,
+              shopifyCustomerId:
+                loggedInCustomerId,
+            },
+          },
+          include: {
+            transactions: {
+              orderBy: {
+                createdAt: "desc",
+              },
+              take: 20,
+            },
+            redemptions: {
+              orderBy: {
+                redeemedAt: "desc",
+              },
+              take: 20,
+              include: {
+                reward: true,
+              },
+            },
+          },
+        });
+    } catch (error) {
+      console.error(
+        "Paw Perks automatic enrollment failed:",
+        error,
+      );
+
+      const html = renderMissingMemberPage({
+        shop,
+        loggedInCustomerId,
+      });
+
+      return new Response(html, {
+        status: 200,
+        headers: {
+          "Content-Type":
+            "text/html; charset=utf-8",
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      });
+    }
+  }
+
+  if (!customer) {
+    return new Response(
+      "Paw Perks customer profile could not be created.",
+      {
+        status: 500,
       },
-    });
+    );
   }
 
   const rewards =
