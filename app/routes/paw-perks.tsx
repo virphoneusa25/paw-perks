@@ -79,7 +79,7 @@ export const action = async ({
   request,
 }: ActionFunctionArgs) => {
   const proxyContext =
-    await authenticate.public.appProxy(request);
+      await authenticate.public.appProxy(request);
 
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop") ?? "";
@@ -287,7 +287,12 @@ export const loader = async ({
 
   const activeRedemptions =
     customer.redemptions.filter(
-      (redemption) =>
+      (
+        redemption: {
+          status: string;
+          expiresAt: Date | null;
+        },
+      ) =>
         redemption.status === "ACTIVE" &&
         (!redemption.expiresAt ||
           redemption.expiresAt > new Date()),
