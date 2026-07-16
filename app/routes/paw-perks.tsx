@@ -6,6 +6,13 @@
 import prisma from "../db.server";
 import { redeemReward } from "../redemption.server";
 import { authenticate } from "../shopify.server";
+import {
+  createCustomerAddress,
+  deleteCustomerAddress,
+  setDefaultCustomerAddress,
+  updateCustomerAddress,
+  updateCustomerProfile,
+} from "../customer-account.server";
 
 const PAWMART_LOGO_URL =
   "https://cdn.shopify.com/s/files/1/0673/2519/8399/files/image1.png?v=1784153296";
@@ -113,6 +120,238 @@ export const action = async ({
   }
 
   const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "");
+
+  const customerGid =
+    `gid://shopify/Customer/${loggedInCustomerId}`;
+
+  try {
+    if (intent === "update-profile") {
+      const firstName = String(
+        formData.get("firstName") ?? "",
+      ).trim();
+      const lastName = String(
+        formData.get("lastName") ?? "",
+      ).trim();
+      const email = String(
+        formData.get("email") ?? "",
+      ).trim();
+
+      if (!firstName) {
+        throw new Error("First name is required.");
+      }
+
+      if (!email) {
+        throw new Error("Email address is required.");
+      }
+
+      await updateCustomerProfile({
+        admin: proxyContext.admin,
+        customerId: customerGid,
+        firstName,
+        lastName,
+        email,
+      });
+
+      await prisma.loyaltyCustomer.update({
+        where: {
+          shop_shopifyCustomerId: {
+            shop,
+            shopifyCustomerId:
+              loggedInCustomerId,
+          },
+        },
+        data: {
+          firstName,
+          lastName,
+          email,
+        },
+      });
+
+      return Response.redirect(
+        portalUrl(shop, {
+          success: "Profile updated successfully.",
+          tab: "account",
+        }),
+        303,
+      );
+    }
+
+    if (intent === "create-address") {
+      await createCustomerAddress({
+        admin: proxyContext.admin,
+        customerId: customerGid,
+        address: {
+          firstName: String(
+            formData.get("firstName") ?? "",
+          ).trim(),
+          lastName: String(
+            formData.get("lastName") ?? "",
+          ).trim(),
+          company: String(
+            formData.get("company") ?? "",
+          ).trim(),
+          address1: String(
+            formData.get("address1") ?? "",
+          ).trim(),
+          address2: String(
+            formData.get("address2") ?? "",
+          ).trim(),
+          city: String(
+            formData.get("city") ?? "",
+          ).trim(),
+          provinceCode: String(
+            formData.get("provinceCode") ?? "",
+          ).trim(),
+          countryCode: String(
+            formData.get("countryCode") ?? "US",
+          ).trim(),
+          zip: String(
+            formData.get("zip") ?? "",
+          ).trim(),
+          phone: String(
+            formData.get("phone") ?? "",
+          ).trim(),
+        },
+        setAsDefault:
+          formData.get("setAsDefault") === "on",
+      });
+
+      return Response.redirect(
+        portalUrl(shop, {
+          success: "Address added successfully.",
+          tab: "addresses",
+        }),
+        303,
+      );
+    }
+
+    if (intent === "update-address") {
+      const addressId = String(
+        formData.get("addressId") ?? "",
+      );
+
+      if (!addressId) {
+        throw new Error("Address ID is missing.");
+      }
+
+      await updateCustomerAddress({
+        admin: proxyContext.admin,
+        customerId: customerGid,
+        addressId,
+        address: {
+          firstName: String(
+            formData.get("firstName") ?? "",
+          ).trim(),
+          lastName: String(
+            formData.get("lastName") ?? "",
+          ).trim(),
+          company: String(
+            formData.get("company") ?? "",
+          ).trim(),
+          address1: String(
+            formData.get("address1") ?? "",
+          ).trim(),
+          address2: String(
+            formData.get("address2") ?? "",
+          ).trim(),
+          city: String(
+            formData.get("city") ?? "",
+          ).trim(),
+          provinceCode: String(
+            formData.get("provinceCode") ?? "",
+          ).trim(),
+          countryCode: String(
+            formData.get("countryCode") ?? "US",
+          ).trim(),
+          zip: String(
+            formData.get("zip") ?? "",
+          ).trim(),
+          phone: String(
+            formData.get("phone") ?? "",
+          ).trim(),
+        },
+        setAsDefault:
+          formData.get("setAsDefault") === "on",
+      });
+
+      return Response.redirect(
+        portalUrl(shop, {
+          success: "Address updated successfully.",
+          tab: "addresses",
+        }),
+        303,
+      );
+    }
+
+    if (intent === "delete-address") {
+      const addressId = String(
+        formData.get("addressId") ?? "",
+      );
+
+      if (!addressId) {
+        throw new Error("Address ID is missing.");
+      }
+
+      await deleteCustomerAddress({
+        admin: proxyContext.admin,
+        customerId: customerGid,
+        addressId,
+      });
+
+      return Response.redirect(
+        portalUrl(shop, {
+          success: "Address deleted.",
+          tab: "addresses",
+        }),
+        303,
+      );
+    }
+
+    if (intent === "set-default-address") {
+      const addressId = String(
+        formData.get("addressId") ?? "",
+      );
+
+      if (!addressId) {
+        throw new Error("Address ID is missing.");
+      }
+
+      await setDefaultCustomerAddress({
+        admin: proxyContext.admin,
+        customerId: customerGid,
+        addressId,
+      });
+
+      return Response.redirect(
+        portalUrl(shop, {
+          success: "Default address updated.",
+          tab: "addresses",
+        }),
+        303,
+      );
+    }
+  } catch (error) {
+    console.error(
+      "Paw Perks account update failed:",
+      error,
+    );
+
+    return Response.redirect(
+      portalUrl(shop, {
+        error:
+          error instanceof Error
+            ? error.message
+            : "The account could not be updated.",
+        tab:
+          intent.includes("address")
+            ? "addresses"
+            : "account",
+      }),
+      303,
+    );
+  }
+
   const rewardDefinitionId = String(
     formData.get("rewardDefinitionId") ?? "",
   );
@@ -201,6 +440,9 @@ export const loader = async ({
 
   const redeemedCode =
     url.searchParams.get("code") ?? "";
+
+  const requestedTab =
+    url.searchParams.get("tab") ?? "";
 
   if (!shop) {
     return new Response("Missing shop.", {
@@ -495,6 +737,9 @@ export const loader = async ({
     addresses: Array<{
       id: string;
       name: string;
+      firstName: string;
+      lastName: string;
+      company: string;
       address1: string;
       address2: string;
       city: string;
@@ -670,6 +915,9 @@ export const loader = async ({
                   .join(" ") ||
                 address.company ||
                 "Saved address",
+              firstName: address.firstName ?? "",
+              lastName: address.lastName ?? "",
+              company: address.company ?? "",
               address1: address.address1 ?? "",
               address2: address.address2 ?? "",
               city: address.city ?? "",
@@ -727,6 +975,7 @@ export const loader = async ({
     successMessage,
     errorMessage,
     redeemedCode,
+    requestedTab,
     dashboardData,
   });
 
@@ -2209,6 +2458,112 @@ function pageShell(
         }
       }
 
+
+      .account-form {
+        display: grid;
+        gap: 16px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .form-field {
+        display: grid;
+        gap: 7px;
+      }
+
+      .form-field--full {
+        grid-column: 1 / -1;
+      }
+
+      .form-field label {
+        color: var(--paw-navy);
+        font-size: 13px;
+        font-weight: 850;
+      }
+
+      .form-field input,
+      .form-field select {
+        width: 100%;
+        min-height: 46px;
+        padding: 11px 13px;
+        border: 1px solid var(--paw-border);
+        border-radius: 11px;
+        background: #fff;
+        color: var(--paw-navy);
+      }
+
+      .form-field input:focus,
+      .form-field select:focus {
+        outline: 3px solid rgba(16,184,174,.14);
+        border-color: var(--paw-teal);
+      }
+
+      .form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .secondary-button,
+      .danger-button {
+        min-height: 42px;
+        padding: 10px 15px;
+        border-radius: 10px;
+        font-weight: 850;
+        cursor: pointer;
+      }
+
+      .secondary-button {
+        border: 1px solid var(--paw-teal);
+        background: #fff;
+        color: var(--paw-teal-dark);
+      }
+
+      .danger-button {
+        border: 1px solid #dfaaa3;
+        background: #fff7f5;
+        color: #9e3d31;
+      }
+
+      .address-editor {
+        margin-top: 14px;
+        padding: 18px;
+        border: 1px solid var(--paw-border);
+        border-radius: 15px;
+        background: #fbfefe;
+      }
+
+      .security-card {
+        padding: 18px;
+        border: 1px solid #cfe8ea;
+        border-radius: 15px;
+        background: linear-gradient(145deg,#f3fffe,#fff);
+      }
+
+      .security-card h3 {
+        margin: 0 0 7px;
+      }
+
+      .security-card p {
+        margin: 0 0 14px;
+        color: var(--paw-muted);
+        line-height: 1.55;
+      }
+
+      @media (max-width: 640px) {
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .form-field--full {
+          grid-column: auto;
+        }
+      }
+
     </style>
   </head>
 
@@ -2342,8 +2697,16 @@ function pageShell(
           );
         });
 
+        var dashboardRoot =
+          document.querySelector(".premium-dashboard");
+
         var initialTab =
-          location.hash.replace("#", "") || "dashboard";
+          location.hash.replace("#", "") ||
+          (dashboardRoot &&
+            dashboardRoot.getAttribute(
+              "data-initial-tab",
+            )) ||
+          "dashboard";
 
         if (
           !document.querySelector(
@@ -2455,6 +2818,7 @@ function renderPortal({
   successMessage,
   errorMessage,
   redeemedCode,
+  requestedTab,
   dashboardData,
 }: {
   shop: string;
@@ -2507,6 +2871,7 @@ function renderPortal({
   successMessage: string;
   errorMessage: string;
   redeemedCode: string;
+  requestedTab: string;
   dashboardData: {
     orders: Array<{
       id: string;
@@ -2522,6 +2887,9 @@ function renderPortal({
     addresses: Array<{
       id: string;
       name: string;
+      firstName: string;
+      lastName: string;
+      company: string;
       address1: string;
       address2: string;
       city: string;
@@ -2624,6 +2992,98 @@ function renderPortal({
                 <br />
                 ${escapeHtml(address.country)}
               </div>
+
+              <details class="address-editor">
+                <summary>Edit address</summary>
+
+                <form method="post" class="account-form" style="margin-top:14px">
+                  <input type="hidden" name="intent" value="update-address" />
+                  <input type="hidden" name="addressId" value="${escapeHtml(address.id)}" />
+
+                  <div class="form-grid">
+                    <div class="form-field">
+                      <label>First name</label>
+                      <input name="firstName" value="${escapeHtml(address.firstName)}" required />
+                    </div>
+
+                    <div class="form-field">
+                      <label>Last name</label>
+                      <input name="lastName" value="${escapeHtml(address.lastName)}" required />
+                    </div>
+
+                    <div class="form-field form-field--full">
+                      <label>Company</label>
+                      <input name="company" value="${escapeHtml(address.company)}" />
+                    </div>
+
+                    <div class="form-field form-field--full">
+                      <label>Address</label>
+                      <input name="address1" value="${escapeHtml(address.address1)}" required />
+                    </div>
+
+                    <div class="form-field form-field--full">
+                      <label>Apartment, suite, etc.</label>
+                      <input name="address2" value="${escapeHtml(address.address2)}" />
+                    </div>
+
+                    <div class="form-field">
+                      <label>City</label>
+                      <input name="city" value="${escapeHtml(address.city)}" required />
+                    </div>
+
+                    <div class="form-field">
+                      <label>State / province code</label>
+                      <input name="provinceCode" value="${escapeHtml(address.province)}" />
+                    </div>
+
+                    <div class="form-field">
+                      <label>ZIP / postal code</label>
+                      <input name="zip" value="${escapeHtml(address.zip)}" required />
+                    </div>
+
+                    <div class="form-field">
+                      <label>Country code</label>
+                      <input name="countryCode" value="US" maxlength="2" required />
+                    </div>
+
+                    <div class="form-field form-field--full">
+                      <label>Phone</label>
+                      <input name="phone" value="${escapeHtml(address.phone)}" />
+                    </div>
+                  </div>
+
+                  <label>
+                    <input type="checkbox" name="setAsDefault" ${address.isDefault ? "checked" : ""} />
+                    Make this my default address
+                  </label>
+
+                  <div class="form-actions">
+                    <button class="button" type="submit">Save address</button>
+                  </div>
+                </form>
+
+                <div class="form-actions" style="margin-top:10px">
+                  ${
+                    address.isDefault
+                      ? ""
+                      : `<form method="post">
+                          <input type="hidden" name="intent" value="set-default-address" />
+                          <input type="hidden" name="addressId" value="${escapeHtml(address.id)}" />
+                          <button class="secondary-button" type="submit">
+                            Set as default
+                          </button>
+                        </form>`
+                  }
+
+                  <form method="post" onsubmit="return confirm('Delete this address?');">
+                    <input type="hidden" name="intent" value="delete-address" />
+                    <input type="hidden" name="addressId" value="${escapeHtml(address.id)}" />
+                    <button class="danger-button" type="submit">
+                      Delete address
+                    </button>
+                  </form>
+                </div>
+              </details>
             </div>
           `,
         )
@@ -2788,7 +3248,13 @@ function renderPortal({
       : "New rewards are coming soon";
 
   return pageShell(`
-    <div class="premium-dashboard" id="top">
+    <div
+      class="premium-dashboard"
+      id="top"
+      data-initial-tab="${escapeHtml(
+        requestedTab || "dashboard",
+      )}"
+    >
       <section class="premium-hero">
         <img
           class="premium-hero__image"
@@ -2999,11 +3465,75 @@ function renderPortal({
         <div class="panel-section">
           <h2>Saved Addresses</h2>
           ${addressCards}
-          <div style="margin-top:18px">
-            <a class="login-link" href="https://${escapeHtml(shop)}/account/addresses">
-              Add or edit an address
-            </a>
-          </div>
+        </div>
+
+        <div class="panel-section" style="margin-top:20px">
+          <h2>Add a New Address</h2>
+
+          <form method="post" class="account-form">
+            <input type="hidden" name="intent" value="create-address" />
+
+            <div class="form-grid">
+              <div class="form-field">
+                <label>First name</label>
+                <input name="firstName" value="${escapeHtml(customer.firstName ?? "")}" required />
+              </div>
+
+              <div class="form-field">
+                <label>Last name</label>
+                <input name="lastName" value="${escapeHtml(customer.lastName ?? "")}" required />
+              </div>
+
+              <div class="form-field form-field--full">
+                <label>Company</label>
+                <input name="company" />
+              </div>
+
+              <div class="form-field form-field--full">
+                <label>Address</label>
+                <input name="address1" required />
+              </div>
+
+              <div class="form-field form-field--full">
+                <label>Apartment, suite, etc.</label>
+                <input name="address2" />
+              </div>
+
+              <div class="form-field">
+                <label>City</label>
+                <input name="city" required />
+              </div>
+
+              <div class="form-field">
+                <label>State / province code</label>
+                <input name="provinceCode" placeholder="KY" />
+              </div>
+
+              <div class="form-field">
+                <label>ZIP / postal code</label>
+                <input name="zip" required />
+              </div>
+
+              <div class="form-field">
+                <label>Country code</label>
+                <input name="countryCode" value="US" maxlength="2" required />
+              </div>
+
+              <div class="form-field form-field--full">
+                <label>Phone</label>
+                <input name="phone" />
+              </div>
+            </div>
+
+            <label>
+              <input type="checkbox" name="setAsDefault" />
+              Make this my default address
+            </label>
+
+            <button class="button" type="submit">
+              Add address
+            </button>
+          </form>
         </div>
       </section>
 
@@ -3039,25 +3569,91 @@ function renderPortal({
       <section class="dashboard-panel" data-panel="account">
         <div class="dashboard-grid">
           <div class="panel-section">
-            <h2>Account Details</h2>
-            <p><strong>Name:</strong> ${escapeHtml(customerName(customer))}</p>
-            <p><strong>Email:</strong> ${escapeHtml(customer.email ?? "Not available")}</p>
-            <p><strong>Member tier:</strong> ${escapeHtml(customer.tier)}</p>
-            <p><strong>Lifetime points:</strong> ${customer.lifetimePoints}</p>
+            <h2>Profile Information</h2>
+
+            <form method="post" class="account-form">
+              <input type="hidden" name="intent" value="update-profile" />
+
+              <div class="form-grid">
+                <div class="form-field">
+                  <label for="profile-first-name">First name</label>
+                  <input
+                    id="profile-first-name"
+                    name="firstName"
+                    value="${escapeHtml(customer.firstName ?? "")}"
+                    autocomplete="given-name"
+                    required
+                  />
+                </div>
+
+                <div class="form-field">
+                  <label for="profile-last-name">Last name</label>
+                  <input
+                    id="profile-last-name"
+                    name="lastName"
+                    value="${escapeHtml(customer.lastName ?? "")}"
+                    autocomplete="family-name"
+                  />
+                </div>
+
+                <div class="form-field form-field--full">
+                  <label for="profile-email">Email address</label>
+                  <input
+                    id="profile-email"
+                    name="email"
+                    type="email"
+                    value="${escapeHtml(customer.email ?? "")}"
+                    autocomplete="email"
+                    required
+                  />
+                </div>
+              </div>
+
+              <button class="button" type="submit">
+                Save profile
+              </button>
+            </form>
           </div>
 
-          <div class="panel-section">
-            <h2>Manage Your Account</h2>
-            <div class="quick-actions">
-              <a class="quick-action" href="https://${escapeHtml(shop)}/account">
-                Edit Shopify profile <span>›</span>
-              </a>
-              <a class="quick-action" href="https://${escapeHtml(shop)}/account/addresses">
-                Edit saved addresses <span>›</span>
-              </a>
-              <a class="quick-action" href="https://${escapeHtml(shop)}/account/logout">
-                Sign out <span>›</span>
-              </a>
+          <div style="display:grid;gap:20px">
+            <div class="panel-section">
+              <h2>Paw Perks Membership</h2>
+              <p><strong>Member tier:</strong> ${escapeHtml(customer.tier)}</p>
+              <p><strong>Available points:</strong> ${customer.pointsBalance}</p>
+              <p><strong>Lifetime points:</strong> ${customer.lifetimePoints}</p>
+            </div>
+
+            <div class="security-card">
+              <h3>Sign-in & Security</h3>
+              <p>
+                Paw Perks uses your main PawMart Shopify customer account.
+                There is no separate Paw Perks login. Password or one-time-code
+                settings remain securely managed by Shopify.
+              </p>
+
+              <div class="form-actions">
+                <a class="secondary-button" href="https://${escapeHtml(shop)}/account">
+                  Manage sign-in
+                </a>
+
+                <a class="secondary-button" href="https://${escapeHtml(shop)}/account/logout">
+                  Sign out
+                </a>
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <h2>Addresses</h2>
+              <p class="section-copy">
+                Add, edit, delete, or choose your default shipping address.
+              </p>
+              <button
+                class="secondary-button dashboard-tab"
+                data-tab="addresses"
+                type="button"
+              >
+                Manage addresses
+              </button>
             </div>
           </div>
         </div>
