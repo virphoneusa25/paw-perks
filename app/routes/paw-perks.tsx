@@ -406,6 +406,80 @@ export const loader = async ({
     );
   }
 
+  if (proxyContext.admin) {
+    try {
+      const profileResponse =
+        await proxyContext.admin.graphql(
+          `#graphql
+            query PawPerksCustomerProfile(
+              $id: ID!
+            ) {
+              customer(id: $id) {
+                email
+                firstName
+                lastName
+              }
+            }
+          `,
+          {
+            variables: {
+              id:
+                `gid://shopify/Customer/${loggedInCustomerId}`,
+            },
+          },
+        );
+
+      const profileResult =
+        (await profileResponse.json()) as {
+          data?: {
+            customer?: {
+              email: string | null;
+              firstName: string | null;
+              lastName: string | null;
+            } | null;
+          };
+        };
+
+      const currentShopifyCustomer =
+        profileResult.data?.customer;
+
+      if (currentShopifyCustomer) {
+        const updatedProfile =
+          await prisma.loyaltyCustomer.update({
+            where: {
+              shop_shopifyCustomerId: {
+                shop,
+                shopifyCustomerId:
+                  loggedInCustomerId,
+              },
+            },
+            data: {
+              email:
+                currentShopifyCustomer.email,
+              firstName:
+                currentShopifyCustomer.firstName,
+              lastName:
+                currentShopifyCustomer.lastName,
+            },
+          });
+
+        customer = {
+          ...customer,
+          email: updatedProfile.email,
+          firstName:
+            updatedProfile.firstName,
+          lastName:
+            updatedProfile.lastName,
+        };
+      }
+    } catch (error) {
+      console.error(
+        "Paw Perks customer profile refresh failed:",
+        error,
+      );
+    }
+  }
+
   let dashboardData: {
     orders: Array<{
       id: string;
@@ -1702,34 +1776,63 @@ function pageShell(
 
       .premium-hero__welcome {
         position: absolute;
+        z-index: 2;
         left: 34px;
         top: 34px;
-        bottom: auto;
-        max-width: 430px;
-        padding: 22px 24px;
-        border: 1px solid rgba(255,255,255,.3);
-        border-radius: 22px;
-        background: rgba(4,30,55,.82);
+        width: min(360px, calc(100% - 68px));
+        padding: 20px 22px;
+        border: 1px solid rgba(94, 231, 220, 0.34);
+        border-radius: 20px;
+        background:
+          linear-gradient(
+            145deg,
+            rgba(4, 30, 55, 0.93),
+            rgba(7, 47, 72, 0.82)
+          );
         color: #fff;
-        box-shadow: 0 18px 50px rgba(0,0,0,.24);
-        backdrop-filter: blur(14px);
+        box-shadow:
+          0 18px 50px rgba(0, 0, 0, 0.28),
+          inset 0 1px 0 rgba(255,255,255,.08);
+        backdrop-filter: blur(16px);
+      }
+
+      .premium-hero__welcome::before {
+        content: "";
+        display: block;
+        width: 44px;
+        height: 4px;
+        margin-bottom: 14px;
+        border-radius: 999px;
+        background:
+          linear-gradient(
+            90deg,
+            var(--paw-teal),
+            #62e6dc
+          );
       }
 
       .premium-hero__welcome span {
-        color: #31d3c7;
-        font-weight: 850;
+        display: block;
+        color: #45d8cd;
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: .01em;
       }
 
       .premium-hero__welcome h1 {
-        margin: 4px 0 6px;
-        font-size: clamp(30px,5vw,50px);
-        line-height: 1;
-        letter-spacing: -.04em;
+        margin: 5px 0 7px;
+        color: #fff;
+        font-size: clamp(34px, 4.1vw, 52px);
+        line-height: .98;
+        letter-spacing: -.045em;
+        overflow-wrap: anywhere;
       }
 
       .premium-hero__welcome p {
         margin: 0;
         color: rgba(255,255,255,.78);
+        font-size: 15px;
+        line-height: 1.45;
       }
 
       .premium-points {
@@ -2084,6 +2187,8 @@ function pageShell(
         .premium-hero__welcome {
           top: auto;
           bottom: 16px;
+          left: 16px;
+          width: calc(100% - 32px);
         }
       }
 
@@ -2429,7 +2534,8 @@ function renderPortal({
   };
 }): string {
   const displayName =
-    customer.firstName || customerName(customer);
+    customer.firstName?.trim() ||
+    "Paw Perks Member";
 
   const orderRows = dashboardData.orders.length
     ? dashboardData.orders
