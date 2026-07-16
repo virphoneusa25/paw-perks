@@ -406,6 +406,216 @@ export const loader = async ({
     );
   }
 
+  let dashboardData: {
+    orders: Array<{
+      id: string;
+      name: string;
+      createdAt: string;
+      fulfillmentStatus: string;
+      financialStatus: string;
+      total: string;
+      currencyCode: string;
+      productTitle: string;
+      productImage: string | null;
+    }>;
+    addresses: Array<{
+      id: string;
+      name: string;
+      address1: string;
+      address2: string;
+      city: string;
+      province: string;
+      zip: string;
+      country: string;
+      phone: string;
+      isDefault: boolean;
+    }>;
+  } = {
+    orders: [],
+    addresses: [],
+  };
+
+  if (proxyContext.admin) {
+    try {
+      const dashboardResponse =
+        await proxyContext.admin.graphql(
+          `#graphql
+            query PawPerksCustomerDashboard(
+              $id: ID!
+            ) {
+              customer(id: $id) {
+                defaultAddress {
+                  id
+                }
+                addressesV2(first: 10) {
+                  nodes {
+                    id
+                    firstName
+                    lastName
+                    company
+                    address1
+                    address2
+                    city
+                    province
+                    zip
+                    country
+                    phone
+                  }
+                }
+                orders(
+                  first: 10
+                  sortKey: CREATED_AT
+                  reverse: true
+                ) {
+                  nodes {
+                    id
+                    name
+                    createdAt
+                    displayFinancialStatus
+                    displayFulfillmentStatus
+                    currentTotalPriceSet {
+                      shopMoney {
+                        amount
+                        currencyCode
+                      }
+                    }
+                    lineItems(first: 1) {
+                      nodes {
+                        title
+                        image {
+                          url
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          `,
+          {
+            variables: {
+              id:
+                `gid://shopify/Customer/${loggedInCustomerId}`,
+            },
+          },
+        );
+
+      const dashboardResult =
+        (await dashboardResponse.json()) as {
+          data?: {
+            customer?: {
+              defaultAddress?: {
+                id: string;
+              } | null;
+              addressesV2?: {
+                nodes: Array<{
+                  id: string;
+                  firstName?: string | null;
+                  lastName?: string | null;
+                  company?: string | null;
+                  address1?: string | null;
+                  address2?: string | null;
+                  city?: string | null;
+                  province?: string | null;
+                  zip?: string | null;
+                  country?: string | null;
+                  phone?: string | null;
+                }>;
+              };
+              orders?: {
+                nodes: Array<{
+                  id: string;
+                  name: string;
+                  createdAt: string;
+                  displayFinancialStatus?: string | null;
+                  displayFulfillmentStatus?: string | null;
+                  currentTotalPriceSet?: {
+                    shopMoney?: {
+                      amount: string;
+                      currencyCode: string;
+                    };
+                  };
+                  lineItems?: {
+                    nodes: Array<{
+                      title: string;
+                      image?: {
+                        url: string;
+                      } | null;
+                    }>;
+                  };
+                }>;
+              };
+            } | null;
+          };
+        };
+
+      const shopifyDashboardCustomer =
+        dashboardResult.data?.customer;
+
+      const defaultAddressId =
+        shopifyDashboardCustomer?.defaultAddress?.id ??
+        "";
+
+      dashboardData = {
+        orders:
+          shopifyDashboardCustomer?.orders?.nodes.map(
+            (order) => ({
+              id: order.id,
+              name: order.name,
+              createdAt: order.createdAt,
+              fulfillmentStatus:
+                order.displayFulfillmentStatus ??
+                "UNFULFILLED",
+              financialStatus:
+                order.displayFinancialStatus ??
+                "PENDING",
+              total:
+                order.currentTotalPriceSet
+                  ?.shopMoney?.amount ?? "0.00",
+              currencyCode:
+                order.currentTotalPriceSet
+                  ?.shopMoney?.currencyCode ?? "USD",
+              productTitle:
+                order.lineItems?.nodes[0]?.title ??
+                "PawMart order",
+              productImage:
+                order.lineItems?.nodes[0]?.image?.url ??
+                null,
+            }),
+          ) ?? [],
+        addresses:
+          shopifyDashboardCustomer?.addressesV2?.nodes.map(
+            (address) => ({
+              id: address.id,
+              name:
+                [
+                  address.firstName,
+                  address.lastName,
+                ]
+                  .filter(Boolean)
+                  .join(" ") ||
+                address.company ||
+                "Saved address",
+              address1: address.address1 ?? "",
+              address2: address.address2 ?? "",
+              city: address.city ?? "",
+              province: address.province ?? "",
+              zip: address.zip ?? "",
+              country: address.country ?? "",
+              phone: address.phone ?? "",
+              isDefault:
+                address.id === defaultAddressId,
+            }),
+          ) ?? [],
+      };
+    } catch (error) {
+      console.error(
+        "Paw Perks dashboard data load failed:",
+        error,
+      );
+    }
+  }
+
   const rewards =
     await prisma.rewardDefinition.findMany({
       where: {
@@ -443,6 +653,7 @@ export const loader = async ({
     successMessage,
     errorMessage,
     redeemedCode,
+    dashboardData,
   });
 
   return new Response(html, {
@@ -1449,6 +1660,367 @@ function pageShell(
           padding: 12px 10px;
         }
       }
+
+      /* Premium Paw Perks customer dashboard */
+      .premium-dashboard {
+        display: grid;
+        gap: 22px;
+      }
+
+      .premium-hero {
+        position: relative;
+        min-height: 470px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 28px;
+        background:
+          linear-gradient(90deg, rgba(3,25,48,.12), rgba(3,25,48,.02)),
+          url("https://cdn.virphoneusa.com/PawMart/ChatGPT%20Image%20Jul%2016%2C%202026%2C%2003_48_05%20PM.png") center / cover no-repeat;
+        box-shadow: 0 24px 70px rgba(5,33,59,.2);
+      }
+
+      .premium-hero__welcome {
+        position: absolute;
+        left: 34px;
+        bottom: 30px;
+        max-width: 390px;
+        padding: 22px 24px;
+        border: 1px solid rgba(255,255,255,.3);
+        border-radius: 22px;
+        background: rgba(4,30,55,.82);
+        color: #fff;
+        box-shadow: 0 18px 50px rgba(0,0,0,.24);
+        backdrop-filter: blur(14px);
+      }
+
+      .premium-hero__welcome span {
+        color: #31d3c7;
+        font-weight: 850;
+      }
+
+      .premium-hero__welcome h1 {
+        margin: 4px 0 6px;
+        font-size: clamp(30px,5vw,50px);
+        line-height: 1;
+        letter-spacing: -.04em;
+      }
+
+      .premium-hero__welcome p {
+        margin: 0;
+        color: rgba(255,255,255,.78);
+      }
+
+      .premium-points {
+        position: relative;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: center;
+        margin: -46px 28px 0;
+        padding: 22px 26px;
+        border: 1px solid var(--paw-border);
+        border-radius: 22px;
+        background: rgba(255,255,255,.97);
+        box-shadow: 0 18px 50px rgba(6,35,63,.14);
+      }
+
+      .premium-points__main {
+        display: flex;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .premium-points__icon {
+        display: grid;
+        width: 76px;
+        height: 76px;
+        place-items: center;
+        border-radius: 50%;
+        background: linear-gradient(145deg,#e4fbf9,#d5f4f2);
+        font-size: 38px;
+      }
+
+      .premium-points__balance {
+        color: var(--paw-teal-dark);
+        font-size: 34px;
+        font-weight: 950;
+        line-height: 1;
+      }
+
+      .premium-points__action {
+        text-align: right;
+      }
+
+      .premium-points__action button {
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 22px;
+        background: #dff8f6;
+        color: var(--paw-teal-dark);
+        font-weight: 900;
+        cursor: pointer;
+      }
+
+      .dashboard-tabs {
+        display: grid;
+        grid-template-columns: repeat(5,minmax(0,1fr));
+        overflow: hidden;
+        border: 1px solid var(--paw-border);
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: var(--paw-shadow);
+      }
+
+      .dashboard-tab {
+        min-height: 82px;
+        border: 0;
+        border-right: 1px solid var(--paw-border);
+        border-bottom: 4px solid transparent;
+        background: #fff;
+        color: var(--paw-muted);
+        font-weight: 850;
+        cursor: pointer;
+      }
+
+      .dashboard-tab:last-child {
+        border-right: 0;
+      }
+
+      .dashboard-tab.active {
+        border-bottom-color: var(--paw-teal);
+        color: var(--paw-teal-dark);
+        background: linear-gradient(180deg,#fff,#f5fffe);
+      }
+
+      .dashboard-panel {
+        display: none;
+      }
+
+      .dashboard-panel.active {
+        display: block;
+      }
+
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: 1.35fr .65fr;
+        gap: 20px;
+      }
+
+      .dashboard-card {
+        overflow: hidden;
+        border: 1px solid var(--paw-border);
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: var(--paw-shadow);
+      }
+
+      .dashboard-card__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 21px 22px 15px;
+      }
+
+      .dashboard-card__head h2 {
+        margin: 0;
+        font-size: 21px;
+      }
+
+      .dashboard-card__body {
+        padding: 0 22px 22px;
+      }
+
+      .order-row {
+        display: grid;
+        grid-template-columns: 64px 1fr auto;
+        gap: 15px;
+        align-items: center;
+        padding: 16px 0;
+        border-top: 1px solid var(--paw-border);
+      }
+
+      .order-thumb {
+        width: 64px;
+        height: 64px;
+        object-fit: cover;
+        border-radius: 14px;
+        background: var(--paw-aqua-soft);
+      }
+
+      .order-title {
+        color: var(--paw-navy);
+        font-weight: 900;
+      }
+
+      .order-meta {
+        margin-top: 4px;
+        color: var(--paw-muted);
+        font-size: 13px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: var(--paw-aqua-soft);
+        color: var(--paw-teal-dark);
+        font-size: 12px;
+        font-weight: 900;
+      }
+
+      .address-card,
+      .quick-action {
+        padding: 16px;
+        border: 1px solid var(--paw-border);
+        border-radius: 15px;
+        background: #fff;
+      }
+
+      .address-card + .address-card {
+        margin-top: 12px;
+      }
+
+      .default-chip {
+        display: inline-flex;
+        margin-left: 7px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--paw-aqua);
+        color: var(--paw-teal-dark);
+        font-size: 11px;
+        font-weight: 900;
+      }
+
+      .quick-actions {
+        display: grid;
+        gap: 9px;
+      }
+
+      .quick-action {
+        display: flex;
+        justify-content: space-between;
+        color: var(--paw-navy);
+        text-decoration: none;
+        font-weight: 800;
+      }
+
+      .subscribe-banner {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 20px;
+        align-items: center;
+        padding: 26px;
+        border: 1px solid #ccecea;
+        border-radius: 22px;
+        background: linear-gradient(100deg,#eefcfb,#fff,#eefcfb);
+      }
+
+      .subscribe-banner h3 {
+        margin: 0 0 7px;
+        font-size: 24px;
+      }
+
+      .subscribe-banner p {
+        margin: 0;
+        color: var(--paw-muted);
+      }
+
+      .subscribe-banner a {
+        padding: 13px 20px;
+        border-radius: 999px;
+        background: linear-gradient(135deg,var(--paw-teal),#28c8be);
+        color: #fff;
+        font-weight: 900;
+        text-decoration: none;
+      }
+
+      .panel-section {
+        padding: 26px;
+        border: 1px solid var(--paw-border);
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: var(--paw-shadow);
+      }
+
+      .panel-section h2 {
+        margin: 0 0 18px;
+      }
+
+      @media (max-width: 850px) {
+        .premium-hero {
+          min-height: 390px;
+          background-position: 60% center;
+        }
+
+        .premium-hero__welcome {
+          left: 16px;
+          right: 16px;
+          bottom: 16px;
+          max-width: none;
+        }
+
+        .premium-points {
+          grid-template-columns: 1fr;
+          margin: -20px 12px 0;
+        }
+
+        .premium-points__action {
+          text-align: left;
+        }
+
+        .dashboard-tabs {
+          grid-template-columns: repeat(5, minmax(94px,1fr));
+          overflow-x: auto;
+        }
+
+        .dashboard-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .premium-hero {
+          min-height: 310px;
+          border-radius: 20px;
+          background-position: 68% center;
+        }
+
+        .premium-hero__welcome {
+          padding: 16px;
+        }
+
+        .premium-hero__welcome h1 {
+          font-size: 30px;
+        }
+
+        .premium-points {
+          padding: 18px;
+        }
+
+        .premium-points__icon {
+          width: 60px;
+          height: 60px;
+          font-size: 30px;
+        }
+
+        .order-row {
+          grid-template-columns: 54px 1fr;
+        }
+
+        .order-row .status-pill {
+          grid-column: 2;
+          justify-self: start;
+        }
+
+        .subscribe-banner {
+          grid-template-columns: 1fr;
+        }
+      }
+
     </style>
   </head>
 
@@ -1544,6 +2116,61 @@ function pageShell(
         });
       })();
     </script>
+
+    <script>
+      (function () {
+        function activateDashboardTab(tabName) {
+          document.querySelectorAll(".dashboard-tab").forEach(function (button) {
+            button.classList.toggle(
+              "active",
+              button.getAttribute("data-tab") === tabName,
+            );
+          });
+
+          document.querySelectorAll(".dashboard-panel").forEach(function (panel) {
+            panel.classList.toggle(
+              "active",
+              panel.getAttribute("data-panel") === tabName,
+            );
+          });
+
+          if (history.replaceState) {
+            history.replaceState(null, "", "#" + tabName);
+          }
+        }
+
+        document.addEventListener("click", function (event) {
+          var button =
+            event.target.closest &&
+            event.target.closest(".dashboard-tab");
+
+          if (!button) {
+            return;
+          }
+
+          event.preventDefault();
+          activateDashboardTab(
+            button.getAttribute("data-tab") || "dashboard",
+          );
+        });
+
+        var initialTab =
+          location.hash.replace("#", "") || "dashboard";
+
+        if (
+          !document.querySelector(
+            '.dashboard-panel[data-panel="' +
+              initialTab +
+              '"]',
+          )
+        ) {
+          initialTab = "dashboard";
+        }
+
+        activateDashboardTab(initialTab);
+      })();
+    </script>
+
   </body>
 </html>`;
 }
@@ -1640,6 +2267,7 @@ function renderPortal({
   successMessage,
   errorMessage,
   redeemedCode,
+  dashboardData,
 }: {
   shop: string;
   customer: {
@@ -1691,7 +2319,130 @@ function renderPortal({
   successMessage: string;
   errorMessage: string;
   redeemedCode: string;
+  dashboardData: {
+    orders: Array<{
+      id: string;
+      name: string;
+      createdAt: string;
+      fulfillmentStatus: string;
+      financialStatus: string;
+      total: string;
+      currencyCode: string;
+      productTitle: string;
+      productImage: string | null;
+    }>;
+    addresses: Array<{
+      id: string;
+      name: string;
+      address1: string;
+      address2: string;
+      city: string;
+      province: string;
+      zip: string;
+      country: string;
+      phone: string;
+      isDefault: boolean;
+    }>;
+  };
 }): string {
+  const displayName =
+    customer.firstName || customerName(customer);
+
+  const orderRows = dashboardData.orders.length
+    ? dashboardData.orders
+        .map((order) => {
+          const createdDate =
+            new Intl.DateTimeFormat("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            }).format(new Date(order.createdAt));
+
+          const status =
+            order.fulfillmentStatus === "FULFILLED"
+              ? "Delivered"
+              : order.fulfillmentStatus === "IN_PROGRESS"
+                ? "Processing"
+                : order.fulfillmentStatus === "PARTIALLY_FULFILLED"
+                  ? "Partially shipped"
+                  : order.fulfillmentStatus === "ON_HOLD"
+                    ? "On hold"
+                    : "Processing";
+
+          return `
+            <div class="order-row">
+              ${
+                order.productImage
+                  ? `<img
+                      class="order-thumb"
+                      src="${escapeHtml(order.productImage)}"
+                      alt=""
+                    />`
+                  : `<div class="order-thumb"></div>`
+              }
+
+              <div>
+                <div class="order-title">
+                  ${escapeHtml(order.name)}
+                  · ${escapeHtml(order.productTitle)}
+                </div>
+
+                <div class="order-meta">
+                  ${escapeHtml(createdDate)}
+                  · ${escapeHtml(order.currencyCode)}
+                  ${escapeHtml(order.total)}
+                </div>
+              </div>
+
+              <span class="status-pill">
+                ${escapeHtml(status)}
+              </span>
+            </div>
+          `;
+        })
+        .join("")
+    : `<div class="empty">
+        No orders are available for this customer yet.
+      </div>`;
+
+  const addressCards = dashboardData.addresses.length
+    ? dashboardData.addresses
+        .map(
+          (address) => `
+            <div class="address-card">
+              <strong>
+                ${escapeHtml(address.name)}
+                ${
+                  address.isDefault
+                    ? `<span class="default-chip">
+                        Default
+                      </span>`
+                    : ""
+                }
+              </strong>
+
+              <div class="order-meta">
+                ${escapeHtml(address.address1)}
+                ${
+                  address.address2
+                    ? `<br />${escapeHtml(address.address2)}`
+                    : ""
+                }
+                <br />
+                ${escapeHtml(address.city)},
+                ${escapeHtml(address.province)}
+                ${escapeHtml(address.zip)}
+                <br />
+                ${escapeHtml(address.country)}
+              </div>
+            </div>
+          `,
+        )
+        .join("")
+    : `<div class="empty">
+        No saved addresses were found.
+      </div>`;
+
   const rewardsHtml = rewards.length
     ? rewards
         .map((reward) => {
@@ -1710,9 +2461,7 @@ function renderPortal({
                 )}
               </span>
 
-              <h3>
-                ${escapeHtml(reward.name)}
-              </h3>
+              <h3>${escapeHtml(reward.name)}</h3>
 
               <p>
                 ${escapeHtml(
@@ -1720,32 +2469,6 @@ function renderPortal({
                     "Redeem this Paw Perks reward on a future order.",
                 )}
               </p>
-
-              <div class="reward__details">
-                ${
-                  reward.minimumSpend
-                    ? `<span>
-                        Minimum purchase:
-                        $${(
-                          reward.minimumSpend / 100
-                        ).toFixed(2)}
-                      </span>`
-                    : `<span>
-                        No minimum purchase required
-                      </span>`
-                }
-
-                ${
-                  reward.expiresInDays
-                    ? `<span>
-                        Code expires after
-                        ${reward.expiresInDays} days
-                      </span>`
-                    : `<span>
-                        Reward does not expire
-                      </span>`
-                }
-              </div>
 
               <div class="reward__meta">
                 <span class="reward__points">
@@ -1788,26 +2511,27 @@ function renderPortal({
         .map(
           (redemption) => `
             <article class="code-card">
-              <div class="code-card__inner">
-                <code>
-                  ${escapeHtml(redemption.discountCode)}
-                </code>
+              <code>
+                ${escapeHtml(redemption.discountCode)}
+              </code>
 
-                <div class="code-card__meta">
-                  <div class="code-card__name">${escapeHtml(
-                    redemption.reward.name,
-                  )}</div>
+              <span>
+                ${escapeHtml(redemption.reward.name)}
+              </span>
 
-                  <div class="code-card__expires">Expires: ${escapeHtml(
-                    formatDate(redemption.expiresAt),
-                  )}</div>
-                </div>
+              <span>
+                Expires:
+                ${escapeHtml(formatDate(redemption.expiresAt))}
+              </span>
 
-                <div class="code-card__actions">
-                  <button class="copy-btn" data-code="${escapeHtml(
-                    redemption.discountCode,
-                  )}" aria-label="Copy code">Copy</button>
-                </div>
+              <div class="code-card__actions">
+                <button
+                  class="copy-btn"
+                  data-code="${escapeHtml(redemption.discountCode)}"
+                  type="button"
+                >
+                  Copy code
+                </button>
               </div>
             </article>
           `,
@@ -1829,23 +2553,16 @@ function renderPortal({
                       transaction.type,
                   )}
                 </td>
-
                 <td class="${
                   transaction.points >= 0
                     ? "positive"
                     : "negative"
                 }">
                   ${
-                    transaction.points >= 0
-                      ? "+"
-                      : ""
+                    transaction.points >= 0 ? "+" : ""
                   }${transaction.points}
                 </td>
-
-                <td>
-                  ${transaction.balanceAfter}
-                </td>
-
+                <td>${transaction.balanceAfter}</td>
                 <td>
                   ${escapeHtml(
                     new Intl.DateTimeFormat(
@@ -1855,9 +2572,7 @@ function renderPortal({
                         day: "numeric",
                         year: "numeric",
                       },
-                    ).format(
-                      transaction.createdAt,
-                    ),
+                    ).format(transaction.createdAt),
                   )}
                 </td>
               </tr>
@@ -1870,269 +2585,288 @@ function renderPortal({
           </td>
         </tr>`;
 
-  const redemptionsHtml =
-    customer.redemptions.length
-      ? customer.redemptions
-          .map(
-            (redemption) => `
-              <tr>
-                <td>
-                  ${escapeHtml(
-                    redemption.reward.name,
-                  )}
-                </td>
-
-                <td>
-                  ${redemption.pointsSpent}
-                </td>
-
-                <td>
-                  <code>
-                    ${escapeHtml(
-                      redemption.discountCode,
-                    )}
-                  </code>
-                </td>
-
-                <td>
-                  <span class="badge ${
-                    redemption.status === "ACTIVE"
-                      ? "badge--active"
-                      : redemption.status ===
-                          "CANCELLED"
-                        ? "badge--cancelled"
-                        : ""
-                  }">
-                    ${escapeHtml(
-                      redemption.status,
-                    )}
-                  </span>
-                </td>
-
-                <td>
-                  ${escapeHtml(
-                    formatDate(
-                      redemption.redeemedAt,
-                    ),
-                  )}
-                </td>
-              </tr>
-            `,
-          )
-          .join("")
-      : `<tr>
-          <td colspan="5">
-            No rewards have been redeemed.
-          </td>
-        </tr>`;
-
   const nextReward =
     rewards.find(
-      (r) => r.pointsRequired > customer.pointsBalance,
+      (reward) =>
+        reward.pointsRequired >
+        customer.pointsBalance,
     ) ?? null;
 
-  let progressMessage = "";
-
-  if (rewards.length === 0) {
-    progressMessage = "New rewards are coming soon.";
-  } else if (!nextReward) {
-    progressMessage = "You have a reward ready to redeem.";
-  } else {
-    progressMessage = `You need $${
-      nextReward.pointsRequired - customer.pointsBalance
-    } more points for a ${formatDiscount(
-      nextReward.discountType,
-      nextReward.discountValue,
-    )} reward.`;
-  }
+  const progressMessage = nextReward
+    ? `${nextReward.pointsRequired - customer.pointsBalance} more points until your next reward`
+    : rewards.length
+      ? "A reward is ready to redeem"
+      : "New rewards are coming soon";
 
   return pageShell(`
-    <section class="account-hero">
-      <div class="hero-copy">
-        <div class="eyebrow">Paw Perks member</div>
+    <div class="premium-dashboard" id="top">
+      <section class="premium-hero">
+        <div class="premium-hero__welcome">
+          <span>Welcome back,</span>
+          <h1>${escapeHtml(displayName)}!</h1>
+          <p>We’re happy to see you again.</p>
+        </div>
+      </section>
 
-        <h1>
-          Welcome, ${escapeHtml(customer.firstName || customerName(customer))}
-        </h1>
-
-        <p>
-          We’re happy to see you again.
-        </p>
-      </div>
-
-      ${PAWMART_ACCOUNT_HERO_URL
-        ? `<img src="${escapeHtml(
-            PAWMART_ACCOUNT_HERO_URL,
-          )}" alt="PawMart pets" class="hero-pets" />`
-        : `<div class="hero-decor" aria-hidden="true">
-            <svg width="160" height="160" viewBox="0 0 160 160" fill="none" aria-hidden="true">
-              <g opacity="0.12" fill="none" stroke="var(--paw-teal)">
-                <circle cx="30" cy="30" r="12" stroke-width="2" />
-                <circle cx="50" cy="20" r="8" stroke-width="2" />
-                <path d="M120 20c0 0 18 24 10 48" stroke-width="1.6" />
-              </g>
-            </svg>
-          </div>`}
-    </section>
-
-    <div class="hero-summary-wrap">
-      <section class="points-summary">
-        <div style="display:flex;gap:16px;align-items:center">
-          <div class="paw-circle" aria-hidden="true">
-            <svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7.5 6.5C8.88071 6.5 10 5.38071 10 4C10 2.61929 8.88071 1.5 7.5 1.5C6.11929 1.5 5 2.61929 5 4C5 5.38071 6.11929 6.5 7.5 6.5Z" fill="var(--paw-teal)"/><path d="M16.5 6.5C17.8807 6.5 19 5.38071 19 4C19 2.61929 17.8807 1.5 16.5 1.5C15.1193 1.5 14 2.61929 14 4C14 5.38071 15.1193 6.5 16.5 6.5Z" fill="var(--paw-teal)"/><path d="M12 13C14.7614 13 17 15.2386 17 18C17 20.7614 14.7614 23 12 23C9.23858 23 7 20.7614 7 18C7 15.2386 9.23858 13 12 13Z" fill="var(--paw-teal)"/></svg>
+      <section class="premium-points">
+        <div class="premium-points__main">
+          <div class="premium-points__icon" aria-hidden="true">
+            🐾
           </div>
 
           <div>
-            <div class="rewards-label">PawPoints Rewards</div>
-            <div class="rewards-balance">${customer.pointsBalance}</div>
-            <div class="rewards-sub">Points available</div>
+            <strong>PawPoints Rewards</strong>
+            <div class="premium-points__balance">
+              ${customer.pointsBalance.toLocaleString("en-US")}
+            </div>
+            <div class="order-meta">
+              Points available · ${escapeHtml(customer.tier)}
+            </div>
           </div>
         </div>
 
-        <div style="text-align:right;min-width:260px">
-          <a class="button button--outline" href="#rewards">View Rewards</a>
-          <div class="rewards-progress">${escapeHtml(progressMessage)}</div>
+        <div class="premium-points__action">
+          <button
+            type="button"
+            class="dashboard-tab-link"
+            onclick="document.querySelector('[data-tab=rewards]').click()"
+          >
+            View Rewards
+          </button>
+
+          <div class="order-meta" style="margin-top:8px">
+            ${escapeHtml(progressMessage)}
+          </div>
+        </div>
+      </section>
+
+      <nav class="dashboard-tabs" aria-label="Customer dashboard">
+        <button class="dashboard-tab active" data-tab="dashboard" type="button">
+          Dashboard
+        </button>
+        <button class="dashboard-tab" data-tab="orders" type="button">
+          Orders
+        </button>
+        <button class="dashboard-tab" data-tab="addresses" type="button">
+          Addresses
+        </button>
+        <button class="dashboard-tab" data-tab="rewards" type="button">
+          Rewards
+        </button>
+        <button class="dashboard-tab" data-tab="account" type="button">
+          Account
+        </button>
+      </nav>
+
+      ${
+        successMessage
+          ? `<div class="notice notice--success">
+              ${escapeHtml(successMessage)}
+              ${
+                redeemedCode
+                  ? `<code class="new-code">
+                      ${escapeHtml(redeemedCode)}
+                    </code>`
+                  : ""
+              }
+            </div>`
+          : ""
+      }
+
+      ${
+        errorMessage
+          ? `<div class="notice notice--error">
+              ${escapeHtml(errorMessage)}
+            </div>`
+          : ""
+      }
+
+      <section class="dashboard-panel active" data-panel="dashboard">
+        <div class="dashboard-grid">
+          <article class="dashboard-card">
+            <div class="dashboard-card__head">
+              <h2>Recent Orders</h2>
+              <button class="dashboard-tab-link" data-tab-target="orders" type="button"
+                onclick="document.querySelector('[data-tab=orders]').click()">
+                View all orders
+              </button>
+            </div>
+            <div class="dashboard-card__body">
+              ${dashboardData.orders.length
+                ? dashboardData.orders.slice(0, 3).map((order) => {
+                    const createdDate =
+                      new Intl.DateTimeFormat("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      }).format(new Date(order.createdAt));
+
+                    return `
+                      <div class="order-row">
+                        ${
+                          order.productImage
+                            ? `<img class="order-thumb" src="${escapeHtml(order.productImage)}" alt="" />`
+                            : `<div class="order-thumb"></div>`
+                        }
+                        <div>
+                          <div class="order-title">
+                            ${escapeHtml(order.name)}
+                            · ${escapeHtml(order.productTitle)}
+                          </div>
+                          <div class="order-meta">
+                            ${escapeHtml(createdDate)}
+                            · ${escapeHtml(order.currencyCode)}
+                            ${escapeHtml(order.total)}
+                          </div>
+                        </div>
+                        <span class="status-pill">
+                          ${escapeHtml(
+                            order.fulfillmentStatus === "FULFILLED"
+                              ? "Delivered"
+                              : "Processing",
+                          )}
+                        </span>
+                      </div>
+                    `;
+                  }).join("")
+                : `<div class="empty">
+                    No orders are available yet.
+                  </div>`
+              }
+            </div>
+          </article>
+
+          <div style="display:grid;gap:20px">
+            <article class="dashboard-card">
+              <div class="dashboard-card__head">
+                <h2>Saved Address</h2>
+              </div>
+              <div class="dashboard-card__body">
+                ${
+                  dashboardData.addresses[0]
+                    ? addressCards.split("</div>")[0] + "</div>"
+                    : `<div class="empty">
+                        No saved address found.
+                      </div>`
+                }
+              </div>
+            </article>
+
+            <article class="dashboard-card">
+              <div class="dashboard-card__head">
+                <h2>Quick Actions</h2>
+              </div>
+              <div class="dashboard-card__body quick-actions">
+                <a class="quick-action" href="https://${escapeHtml(shop)}/account">
+                  Manage Profile <span>›</span>
+                </a>
+                <a class="quick-action" href="https://${escapeHtml(shop)}/account/addresses">
+                  Manage Addresses <span>›</span>
+                </a>
+                <button class="quick-action dashboard-tab" data-tab="rewards" type="button">
+                  View Rewards <span>›</span>
+                </button>
+                <a class="quick-action" href="https://${escapeHtml(shop)}/account/logout">
+                  Sign Out <span>›</span>
+                </a>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <div class="subscribe-banner" style="margin-top:20px">
+          <div>
+            <h3>Subscribe & Save</h3>
+            <p>
+              Save up to 15% on your favorite essentials,
+              delivered on your schedule.
+            </p>
+          </div>
+          <a href="https://${escapeHtml(shop)}/pages/autoship-save">
+            Manage Subscriptions
+          </a>
+        </div>
+      </section>
+
+      <section class="dashboard-panel" data-panel="orders">
+        <div class="panel-section">
+          <h2>Your Orders</h2>
+          ${orderRows}
+          <div style="margin-top:18px">
+            <a class="login-link" href="https://${escapeHtml(shop)}/account/orders">
+              Open complete order history
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-panel" data-panel="addresses">
+        <div class="panel-section">
+          <h2>Saved Addresses</h2>
+          ${addressCards}
+          <div style="margin-top:18px">
+            <a class="login-link" href="https://${escapeHtml(shop)}/account/addresses">
+              Add or edit an address
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-panel" data-panel="rewards">
+        <div class="panel-section">
+          <h2>Available Rewards</h2>
+          <div class="reward-grid">${rewardsHtml}</div>
+        </div>
+
+        <div class="panel-section" style="margin-top:20px">
+          <h2>Your Active Codes</h2>
+          <div class="code-grid">${codesHtml}</div>
+        </div>
+
+        <div class="panel-section" style="margin-top:20px">
+          <h2>Points Activity</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Activity</th>
+                  <th>Points</th>
+                  <th>Balance</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>${transactionsHtml}</tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-panel" data-panel="account">
+        <div class="dashboard-grid">
+          <div class="panel-section">
+            <h2>Account Details</h2>
+            <p><strong>Name:</strong> ${escapeHtml(customerName(customer))}</p>
+            <p><strong>Email:</strong> ${escapeHtml(customer.email ?? "Not available")}</p>
+            <p><strong>Member tier:</strong> ${escapeHtml(customer.tier)}</p>
+            <p><strong>Lifetime points:</strong> ${customer.lifetimePoints}</p>
+          </div>
+
+          <div class="panel-section">
+            <h2>Manage Your Account</h2>
+            <div class="quick-actions">
+              <a class="quick-action" href="https://${escapeHtml(shop)}/account">
+                Edit Shopify profile <span>›</span>
+              </a>
+              <a class="quick-action" href="https://${escapeHtml(shop)}/account/addresses">
+                Edit saved addresses <span>›</span>
+              </a>
+              <a class="quick-action" href="https://${escapeHtml(shop)}/account/logout">
+                Sign out <span>›</span>
+              </a>
+            </div>
+          </div>
         </div>
       </section>
     </div>
-
-    <nav class="account-tabs" role="navigation" aria-label="Account tabs">
-      <a href="#top" class="tab">Dashboard</a>
-      <a href="https://${escapeHtml(shop)}/account/orders" class="tab">Orders</a>
-      <a href="https://${escapeHtml(shop)}/account/addresses" class="tab">Addresses</a>
-      <a href="#rewards" class="tab active">Rewards</a>
-      <a href="https://${escapeHtml(shop)}/account" class="tab">Account</a>
-    </nav>
-
-    ${
-      successMessage
-        ? `<div class="notice notice--success">
-            ${escapeHtml(successMessage)}
-
-            ${
-              redeemedCode
-                ? `<code class="new-code">
-                    ${escapeHtml(redeemedCode)}
-                  </code>`
-                : ""
-            }
-          </div>`
-        : ""
-    }
-
-    ${
-      errorMessage
-        ? `<div class="notice notice--error">
-            ${escapeHtml(errorMessage)}
-          </div>`
-        : ""
-    }
-
-    <section id="rewards" class="section">
-      <div class="section-head">
-        <div class="section-title-wrap">
-          <span class="section-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-7" stroke="var(--paw-teal)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3v7" stroke="var(--paw-teal)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-
-          <div>
-            <h2>Available rewards</h2>
-
-            <p class="section-copy">
-              Turn your Paw Points into exclusive PawMart savings.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="reward-grid">
-        ${rewardsHtml}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <div class="section-title-wrap">
-          <span class="section-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 7v7a2 2 0 0 0 .586 1.414L12 23l8.414-7.586A2 2 0 0 0 21 14V7a2 2 0 0 0-2-2h-4" stroke="var(--paw-teal)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-
-          <div>
-            <h2>Your active codes</h2>
-
-            <p class="section-copy">
-              Copy a reward code and apply it during checkout.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="code-grid">
-        ${codesHtml}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <div class="section-title-wrap">
-          <span class="section-icon">🐾</span>
-
-          <div>
-            <h2>Points activity</h2>
-
-            <p class="section-copy">
-              Follow every point earned, redeemed, or adjusted.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Activity</th>
-              <th>Points</th>
-              <th>Balance</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            ${transactionsHtml}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-head">
-        <div class="section-title-wrap">
-          <span class="section-icon">🧾</span>
-
-          <div>
-            <h2>Redemption history</h2>
-
-            <p class="section-copy">
-              Review your current and previous PawMart rewards.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Reward</th>
-              <th>Points</th>
-              <th>Code</th>
-              <th>Status</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            ${redemptionsHtml}
-          </tbody>
-        </table>
-      </div>
-    </section>
   `, shop);
 }
