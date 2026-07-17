@@ -456,11 +456,10 @@ export const loader = async ({
       errorMessage,
     });
 
-    return new Response(html, {
+    return proxyContext.liquid(html, {
+      layout: true,
       status: 200,
       headers: {
-        "Content-Type":
-          "text/html; charset=utf-8",
         "Cache-Control":
           "no-store, no-cache, must-revalidate",
       },
@@ -502,11 +501,10 @@ export const loader = async ({
         loggedInCustomerId,
       });
 
-      return new Response(html, {
+      return proxyContext.liquid(html, {
+        layout: true,
         status: 200,
         headers: {
-          "Content-Type":
-            "text/html; charset=utf-8",
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
         },
@@ -627,11 +625,10 @@ export const loader = async ({
         loggedInCustomerId,
       });
 
-      return new Response(html, {
+      return proxyContext.liquid(html, {
+        layout: true,
         status: 200,
         headers: {
-          "Content-Type":
-            "text/html; charset=utf-8",
           "Cache-Control":
             "no-store, no-cache, must-revalidate",
         },
@@ -979,11 +976,10 @@ export const loader = async ({
     dashboardData,
   });
 
-  return new Response(html, {
+  return proxyContext.liquid(html, {
+    layout: true,
     status: 200,
     headers: {
-      "Content-Type":
-        "text/html; charset=utf-8",
       "Cache-Control":
         "no-store, no-cache, must-revalidate",
     },
@@ -998,24 +994,19 @@ function pageShell(
     ? `https://${escapeHtml(shop)}`
     : "#";
 
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
+  return `<style>
+      .paw-perks-theme-page {
+        display: block;
+        width: 100%;
+      }
 
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1"
-    />
+      .paw-perks-theme-page .site-header,
+      .paw-perks-theme-page .top-announcement,
+      .paw-perks-theme-page .site-footer,
+      .paw-perks-theme-page .header-actions {
+        display: none !important;
+      }
 
-    <meta
-      name="theme-color"
-      content="#ffffff"
-    />
-
-    <title>Paw Perks | PawMart</title>
-
-    <style>
       :root {
         --paw-navy: #06233f;
         --paw-navy-soft: #29445e;
@@ -1034,17 +1025,18 @@ function pageShell(
         --paw-shadow: 0 10px 35px rgba(6, 35, 63, 0.08);
       }
 
-      * {
+      .paw-perks-theme-page,
+      .paw-perks-theme-page * {
         box-sizing: border-box;
       }
 
-      html {
+      .paw-perks-theme-page {
         scroll-behavior: smooth;
       }
 
-      body {
-        margin: 0;
-        min-height: 100vh;
+      .paw-perks-theme-page {
+        margin: 0 auto;
+        min-height: 0;
         color: var(--paw-navy);
         background:
           radial-gradient(
@@ -1066,13 +1058,13 @@ function pageShell(
           sans-serif;
       }
 
-      button,
-      input,
-      select {
+      .paw-perks-theme-page button,
+      .paw-perks-theme-page input,
+      .paw-perks-theme-page select {
         font: inherit;
       }
 
-      a {
+      .paw-perks-theme-page a {
         color: inherit;
       }
 
@@ -1768,14 +1760,14 @@ function pageShell(
         border-radius: 14px;
       }
 
-      table {
+      .paw-perks-theme-page table {
         width: 100%;
         border-collapse: collapse;
         background: #ffffff;
       }
 
-      th,
-      td {
+      .paw-perks-theme-page th,
+      .paw-perks-theme-page td {
         padding: 14px 13px;
         border-bottom: 1px solid #ede7dc;
         text-align: left;
@@ -1783,7 +1775,7 @@ function pageShell(
         white-space: nowrap;
       }
 
-      th {
+      .paw-perks-theme-page th {
         background: #faf7f1;
         color: var(--paw-muted);
         font-size: 12px;
@@ -1792,11 +1784,11 @@ function pageShell(
         text-transform: uppercase;
       }
 
-      tbody tr:last-child td {
+      .paw-perks-theme-page tbody tr:last-child td {
         border-bottom: 0;
       }
 
-      tbody tr:hover {
+      .paw-perks-theme-page tbody tr:hover {
         background: #fffdf8;
       }
 
@@ -2565,76 +2557,11 @@ function pageShell(
       }
 
     </style>
-  </head>
+  <div class="page-shell paw-perks-theme-page">
+    ${content}
+  </div>
 
-  <body>
-    <div class="top-announcement" role="region" aria-label="Announcement">
-      <span aria-hidden="true">🚚</span>
-      &nbsp;Free shipping over $49 · Premium pet essentials delivered with love
-    </div>
 
-    <header class="site-header">
-      <div class="site-header__inner">
-        <a class="brand" href="${storeUrl}" aria-label="PawMart home">
-          ${
-            PAWMART_LOGO_URL.includes("PASTE_")
-              ? `
-                <span class="brand__fallback">
-                  <span class="brand__paw" aria-hidden="true">
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                      <path d="M7.5 6.5C8.88071 6.5 10 5.38071 10 4C10 2.61929 8.88071 1.5 7.5 1.5C6.11929 1.5 5 2.61929 5 4C5 5.38071 6.11929 6.5 7.5 6.5Z" fill="var(--paw-teal)"/>
-                      <path d="M16.5 6.5C17.8807 6.5 19 5.38071 19 4C19 2.61929 17.8807 1.5 16.5 1.5C15.1193 1.5 14 2.61929 14 4C14 5.38071 15.1193 6.5 16.5 6.5Z" fill="var(--paw-teal)"/>
-                      <path d="M7 11C8.65685 11 10 9.65685 10 8C10 6.34315 8.65685 5 7 5C5.34315 5 4 6.34315 4 8C4 9.65685 5.34315 11 7 11Z" fill="var(--paw-teal)"/>
-                      <path d="M17 11C18.6569 11 20 9.65685 20 8C20 6.34315 18.6569 5 17 5C15.3431 5 14 6.34315 14 8C14 9.65685 15.3431 11 17 11Z" fill="var(--paw-teal)"/>
-                      <path d="M12 13C14.7614 13 17 15.2386 17 18C17 20.7614 14.7614 23 12 23C9.23858 23 7 20.7614 7 18C7 15.2386 9.23858 13 12 13Z" fill="var(--paw-teal)"/>
-                    </svg>
-                  </span>
-                  PawMart
-                </span>
-              `
-              : `
-                <img
-                  class="brand__logo"
-                  src="${escapeHtml(PAWMART_LOGO_URL)}"
-                  alt="PawMart"
-                />
-              `
-          }
-        </a>
-
-        <nav class="header-actions" aria-label="Header actions">
-          <a class="header-link" href="${storeUrl}" aria-label="Shop">Shop</a>
-
-          <button class="header-icon" aria-label="Search" type="button">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 21l-4.35-4.35" stroke="var(--paw-navy)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="11" r="6" stroke="var(--paw-navy)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-
-          <a class="header-icon header-account" href="#" aria-label="Account">
-            <span class="account-circle" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 12c2.761 0 5-2.239 5-5s-2.239-5-5-5-5 2.239-5 5 2.239 5 5 5z" stroke="var(--paw-navy)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 20c0-3.314 2.686-6 6-6h4c3.314 0 6 2.686 6 6" stroke="var(--paw-navy)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </span>
-          </a>
-
-          <a class="header-icon" href="#" aria-label="Cart">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6h15l-1.5 9h-12z" stroke="var(--paw-navy)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="20" r="1" fill="var(--paw-teal)"/><circle cx="18" cy="20" r="1" fill="var(--paw-teal)"/></svg>
-          </a>
-
-          <button class="header-icon" aria-label="Menu" type="button">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" stroke="var(--paw-navy)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-        </nav>
-      </div>
-    </header>
-
-    <main class="page-shell">
-      ${content}
-    </main>
-
-    <footer class="site-footer">
-      <strong>Paw Perks by PawMart</strong>
-      <br />
-      Rewards for pets, savings for their people.
-    </footer>
     <script>
       (function(){
         function handleCopy(btn){
@@ -2722,8 +2649,7 @@ function pageShell(
       })();
     </script>
 
-  </body>
-</html>`;
+`;
 }
 
 function renderSignedOutPage({
