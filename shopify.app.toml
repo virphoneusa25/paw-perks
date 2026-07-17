@@ -1,5 +1,3 @@
-# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
-
 client_id = "b7103280b4167c2e9c882fcc49724092"
 name = "paw-perks"
 application_url = "https://pawperks-pawmart-prod-e7dze8h0e6ckg4bz.eastus2-01.azurewebsites.net"
@@ -20,23 +18,23 @@ uri = "/webhooks/app/scopes_update"
 topics = ["app/scopes_update"]
 
 [[webhooks.subscriptions]]
-topics = ["orders/paid"]
-uri = "/webhooks/orders/paid"
+uri = "/webhooks/refunds/create"
+topics = ["refunds/create"]
 
 [[webhooks.subscriptions]]
-topics = ["refunds/create"]
-uri = "/webhooks/refunds/create"
+uri = "/webhooks/orders/paid"
+topics = ["orders/paid"]
 
 [access_scopes]
-scopes = "read_customers,read_orders,read_products,write_customers,write_discounts,write_app_proxy"
+scopes = "read_customers,read_orders,read_products,write_app_proxy,write_customers,write_discounts"
 use_legacy_install_flow = false
-
-[app_proxy]
-url = "/paw-perks"
-prefix = "apps"
-subpath = "paw-perks"
 
 [auth]
 redirect_urls = [
   "https://pawperks-pawmart-prod-e7dze8h0e6ckg4bz.eastus2-01.azurewebsites.net/api/auth"
 ]
+
+[app_proxy]
+url = "https://pawperks-pawmart-prod-e7dze8h0e6ckg4bz.eastus2-01.azurewebsites.net/paw-perks"
+prefix = "apps"
+subpath = "paw-perks"
